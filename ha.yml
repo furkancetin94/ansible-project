@@ -1,0 +1,61 @@
+---
+- name: Insert Domain To HA Configuration File
+  hosts: host
+  vars_files:
+    - vars.yml
+  tasks:
+
+    - name: control the file
+      stat:
+        path: /etc/ha.conf
+      register: file
+
+    - name: remove oldest backup
+      file:
+        path: /tmp/backup/ha_old2.conf
+        state: absent
+      when: ( file.stat.exists == true )
+      ignore_errors: yes
+
+    - name: change old backup
+      copy:
+        src: /tmp/backup/ha_old.conf
+        dest: /tmp/backup/ha_old2.conf
+        remote_src: yes
+      when: ( file.stat.exists == true )
+      ignore_errors: yes
+
+    - name: backup original file
+      copy:
+        src: /etc/ha.conf
+        dest: /tmp/backup/ha_old.conf
+        remote_src: yes
+      when: ( file.stat.exists == true )
+
+    - name: edit ha.conf file
+      lineinfile:
+        line: " acl host-{{ domain }} hdr(host) -i {{ fqdn }}\n redirect location {{ url }} code 301 if host-{{ domain }}\n"
+        state: present
+        path: /etc/ha.conf
+      when: ( file.stat.exists == true )
+
+    - name: reload ha service
+      service:
+        name: sshd
+        state: reloaded
+      when: ( file.stat.exists == true )
+
+    - name: select your insert
+      shell: grep -i {{ domain }} /etc/ha.conf
+      register: output
+      when: ( file.stat.exists == true )
+
+    - name: show instert
+      debug:
+        msg: "{{ output.stdout }}"
+      when: ( file.stat.exists == true )
+
+    - name: show error
+      debug:
+        msg: ha.conf file is missing
+      when: ( file.stat.exists == false )
